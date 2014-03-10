@@ -8,7 +8,7 @@ number of LEDs rather memory efficient, although RAM size is still the limiting 
 The number of LEDs that can be driven by this library can be approximated by the following formula (it won't be exactly that many as the library needs some RAM, too):
 Number of LEDs = (RAM size in bytes / 48) * 16
 
-## Whaaa? This code is crap and incomplete! WTF did you think calling this a library?!
+### Whaaa? This code is crap and incomplete! WTF did you think calling this a library?!
 
 Calm your finite state machines.
 
@@ -18,12 +18,12 @@ If you find a bug please report it and if you can and are willing to, provide a 
 
 At some point this might actually become a full grown library that supports STM32F100, STM32F4 etc.
 
-## Why does this library exist?
+### Why does this library exist?
 
 Due to the non-standard NRZ protocol used to control these LEDs the correct timing of the data stream is very important 
 and is not easily achievable with standard MCU peripherals like SPI/USART/I2C.  
 
-## How does it work? 
+### How does it work? 
 
 The approach used here is similar to the approach of the [OctoWS2812](http://www.pjrc.com/teensy/td_libs_OctoWS2811.html) library for the Teensy.
 
@@ -46,6 +46,26 @@ Transferring the data via DMA to the GPIO port means that per 16 LEDs one half w
 
 The frame buffer is transmitted MSBit first in the order G-R-B.
 
-## How do I use it?
+### How do I use it?
 
 Currently you have to fill the frame buffer with 24 bytes per 16 LEDs and then call the WS2812_sendbuf(24*#LEDs).
+
+### Licensing
+
+This code is licensed under the Creative Commons Attribution license v3.0
+
+**This only applies to my example code, all other code by ST and ARM are property of their respective owners and are released under a different license**
+
+This means that you are free:
++ **to Share** — to copy, distribute and transmit the work
++ **to Remix** — to adapt the work
++ to make commercial use of the work
+
+Under the following conditions:
+**Attribution** — You must attribute the work in the manner specified by the author or licensor
+
+**Attribution** in this case means that you should please provide a link to [Elia's Electronics](http://eliaselectronics.com/ "My blog")
+
+More information on this license can be found [here](http://creativecommons.org/licenses/by/3.0/ "CC BY")
+
+![CC BY](http://i.creativecommons.org/l/by/3.0/88x31.png)
