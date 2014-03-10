@@ -32,8 +32,8 @@ The DMA allows to transfer data from memory to a peripheral register in this cas
 Therefore the CPU can already prepare the next frame to be sent while the current frame is still being transmitted.
 
 The idea to create 16 parallel 800kBit/s data streams is the following:
-A) Use a Timer to create an 800kHz time base and a DMA request every 1.25us.
-B) Use 2 compare modules to create DMA requests at the low bit time (350ns) and the high bit time (700ns)
+* Use a Timer to create an 800kHz time base and a DMA request every 1.25us.
+* Use 2 compare modules to create DMA requests at the low bit time (350ns) and the high bit time (700ns)
 
 1. The 1.25us DMA request sets all bits of the GPIO port high
 2. The 350ns DMA request transfers the data from the frame buffer to the GPIO port. If the bit is a 0, the GPIO pin will go low, otherwise it will stay high.
