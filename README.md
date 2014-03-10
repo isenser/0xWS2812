@@ -1,5 +1,7 @@
 # 0xWS2812 STM32 driver for WS2812(B) RGB LEDs
 
+0xWS2812 pronounced "hex-WS2812"
+
 This code aims at providing a basic interface to the WS2812(B) individually addressable RGB LEDs by WorldSemi. 
 
 The code outputs 16 parallel data streams to 16 parallel strings of LEDs. This allows the MCU to drive a large
@@ -42,7 +44,7 @@ The idea to create 16 parallel 800kBit/s data streams is the following:
 
 This creates a stream of pulses with a pulse period of 1.25us and a pulse width of either 350ns or 700ns depending on the bit value the pulse represents.
 
-Transferring the data via DMA to the GPIO port means that per 16 LEDs one half word (two bytes) is needed per bit. At 24 bits per LED that makes 14 half words (48 bytes) per 16 LEDs.
+Transferring the data via DMA to the GPIO port means that per 16 LEDs one half word (two bytes) is needed per bit. At 24 bits per LED that makes 24 half words (48 bytes) per 16 LEDs.
 
 The frame buffer is transmitted MSBit first in the order G-R-B.
 
@@ -52,20 +54,4 @@ Currently you have to fill the frame buffer with 24 bytes per 16 LEDs and then c
 
 ### Licensing
 
-This code is licensed under the Creative Commons Attribution license v3.0
-
-**This only applies to my example code, all other code by ST and ARM are property of their respective owners and are released under a different license**
-
-This means that you are free:
-+ **to Share** — to copy, distribute and transmit the work
-+ **to Remix** — to adapt the work
-+ to make commercial use of the work
-
-Under the following conditions:
-**Attribution** — You must attribute the work in the manner specified by the author or licensor
-
-**Attribution** in this case means that you should please provide a link to [Elia's Electronics](http://eliaselectronics.com/ "My blog")
-
-More information on this license can be found [here](http://creativecommons.org/licenses/by/3.0/ "CC BY")
-
-![CC BY](http://i.creativecommons.org/l/by/3.0/88x31.png)
+This code is licensed under the MIT License, see LICENSE for more info.
