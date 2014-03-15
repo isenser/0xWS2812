@@ -210,14 +210,11 @@ void WS2812_sendbuf(uint32_t buffersize)
 	/* transmission complete flag, indicate that transmission is taking place */
 	tfin = 0;
 	
-	/* !!! DO NOT CHANGE !!! 
-	 * this sequence gets the timing of the first bit 
-	 * into spec, haven't figured out why yet */
-	TIM2->CNT = 25;					// preload counter register --> UEV generated at next overflow (starts DMA transfer)
 	TIM2->SR = 0;					// clear all status flags just to be sure
 	DMA1_Channel2->CCR |= 0x0001;	// enable the DMA channels
 	DMA1_Channel5->CCR |= 0x0001;
 	DMA1_Channel7->CCR |= 0x0001;
+	TIM2->CNT = 29;					// set CNT to 29 so that TIM2 immediately overflows and generates UEV to start DMA transfer
 	TIM2->CR1 |= 0x0001;			// start TIM2
 }
 
