@@ -23,8 +23,6 @@
 
 #include <stm32f10x.h>
 
-#define GPIOA_ODR_Address 0x4001080C
-
 uint16_t WS2812_IO_High = 0xFFFF;
 uint16_t WS2812_IO_Low = 0x0000;
 
@@ -89,6 +87,7 @@ void TIM2_init(void)
 {
 	TIM_TimeBaseInitTypeDef TIM_TimeBaseStructure;
 	TIM_OCInitTypeDef TIM_OCInitStructure;
+	NVIC_InitTypeDef NVIC_InitStructure;
 	
 	uint16_t PrescalerValue;
 	
@@ -108,25 +107,16 @@ void TIM2_init(void)
 	/* Timing Mode configuration: Channel 1 */
 	TIM_OCInitStructure.TIM_OCMode = TIM_OCMode_Timing;
 	TIM_OCInitStructure.TIM_OutputState = TIM_OutputState_Disable;
-	TIM_OCInitStructure.TIM_Pulse = 9;
+	TIM_OCInitStructure.TIM_Pulse = 8;
 	TIM_OC1Init(TIM2, &TIM_OCInitStructure);
 	TIM_OC1PreloadConfig(TIM2, TIM_OCPreload_Disable);	
 
 	/* Timing Mode configuration: Channel 2 */
-	TIM_OCInitStructure.TIM_OCMode = TIM_OCMode_Timing;
+	TIM_OCInitStructure.TIM_OCMode = TIM_OCMode_PWM1;
 	TIM_OCInitStructure.TIM_OutputState = TIM_OutputState_Disable;
 	TIM_OCInitStructure.TIM_Pulse = 17;
 	TIM_OC2Init(TIM2, &TIM_OCInitStructure);
 	TIM_OC2PreloadConfig(TIM2, TIM_OCPreload_Disable);
-
-	/* TIM2 CC1 event DMA Request enable */
-	TIM_DMACmd(TIM2, TIM_DMA_CC1, ENABLE);
-	
-	/* TIM2 CC2 event DMA Request enable */
-	TIM_DMACmd(TIM2, TIM_DMA_CC2, ENABLE);
-	
-	/* TIM2 Update event DMA Request enable */
-	TIM_DMACmd(TIM2, TIM_DMA_Update, ENABLE);
 }
 
 void DMA_init(void)
@@ -139,7 +129,7 @@ void DMA_init(void)
 	// TIM2 Update event
 	/* DMA1 Channel2 configuration ----------------------------------------------*/
 	DMA_DeInit(DMA1_Channel2);
-	DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)GPIOA_ODR_Address;
+	DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)&GPIOA->ODR;
 	DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)WS2812_IO_High;
 	DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralDST;
 	DMA_InitStructure.DMA_BufferSize = 0;
@@ -155,7 +145,7 @@ void DMA_init(void)
 	// TIM2 CC1 event
 	/* DMA1 Channel5 configuration ----------------------------------------------*/
 	DMA_DeInit(DMA1_Channel5);
-	DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)GPIOA_ODR_Address;
+	DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)&GPIOA->ODR;
 	DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)WS2812_IO_framedata;
 	DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralDST;
 	DMA_InitStructure.DMA_BufferSize = 0;
@@ -171,7 +161,7 @@ void DMA_init(void)
 	// TIM2 CC2 event
 	/* DMA1 Channel7 configuration ----------------------------------------------*/
 	DMA_DeInit(DMA1_Channel7);
-	DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)GPIOA_ODR_Address;
+	DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)&GPIOA->ODR;
 	DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)WS2812_IO_Low;
 	DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralDST;
 	DMA_InitStructure.DMA_BufferSize = 0;
@@ -197,35 +187,53 @@ void DMA_init(void)
 /* Transmit the frambuffer with buffersize number of bytes to the LEDs 
  * buffersize = (#LEDs / 16) * 24 */
 void WS2812_sendbuf(uint32_t buffersize)
-{	
+{		
+	/* transmission complete flag, indicate that transmission is taking place */
+	tfin = 0;
+	
+	// clear all relevant DMA flags
+	DMA_ClearFlag(DMA1_FLAG_TC2 | DMA1_FLAG_HT2 | DMA1_FLAG_GL2 | DMA1_FLAG_TE2);
+	DMA_ClearFlag(DMA1_FLAG_TC5 | DMA1_FLAG_HT5 | DMA1_FLAG_GL5 | DMA1_FLAG_TE5);
+	DMA_ClearFlag(DMA1_FLAG_HT7 | DMA1_FLAG_GL7 | DMA1_FLAG_TE7);
+	
 	// configure the number of bytes to be transferred by the DMA controller
 	DMA_SetCurrDataCounter(DMA1_Channel2, buffersize);
 	DMA_SetCurrDataCounter(DMA1_Channel5, buffersize);
 	DMA_SetCurrDataCounter(DMA1_Channel7, buffersize);
 	
-	DMA_ClearFlag(DMA1_FLAG_TC2 | DMA1_FLAG_HT2 | DMA1_FLAG_GL2 | DMA1_FLAG_TE2);
-	DMA_ClearFlag(DMA1_FLAG_TC5 | DMA1_FLAG_HT5 | DMA1_FLAG_GL5 | DMA1_FLAG_TE5);
-	DMA_ClearFlag(DMA1_FLAG_TC7 | DMA1_FLAG_HT7 | DMA1_FLAG_GL7 | DMA1_FLAG_TE7);
-
-	/* transmission complete flag, indicate that transmission is taking place */
-	tfin = 0;
+	// clear all TIM2 flags
+	TIM2->SR = 0;
 	
-	TIM2->SR = 0;					// clear all status flags just to be sure
-	DMA1_Channel2->CCR |= 0x0001;	// enable the DMA channels
-	DMA1_Channel5->CCR |= 0x0001;
-	DMA1_Channel7->CCR |= 0x0001;
-	TIM2->CNT = 29;					// set CNT to 29 so that TIM2 immediately overflows and generates UEV to start DMA transfer
-	TIM2->CR1 |= 0x0001;			// start TIM2
+	// enable the corresponding DMA channels
+	DMA_Cmd(DMA1_Channel2, ENABLE);
+	DMA_Cmd(DMA1_Channel5, ENABLE);
+	DMA_Cmd(DMA1_Channel7, ENABLE);
+	
+	// IMPORTANT: enable the TIM2 DMA requests AFTER enabling the DMA channels!
+	TIM_DMACmd(TIM2, TIM_DMA_CC1, ENABLE);
+	TIM_DMACmd(TIM2, TIM_DMA_CC2, ENABLE);
+	TIM_DMACmd(TIM2, TIM_DMA_Update, ENABLE);
+	
+	// preload counter with 29 so TIM2 generates UEV directly to start DMA transfer
+	TIM_SetCounter(TIM2, 29);
+	
+	// start TIM2
+	TIM_Cmd(TIM2, ENABLE);
 }
 
 /* DMA1 Channel7 Interrupt Handler gets executed once the complete framebuffer has been transmitted to the LEDs */
 void DMA1_Channel7_IRQHandler(void)
 {
-	TIM2->CR1 &= ~0x0001;				// stop TIM2
-	DMA_Cmd(DMA1_Channel2, DISABLE);	// disable the DMA channels
+	DMA_ClearITPendingBit(DMA1_IT_TC7);	// clear DMA7 transfer complete interrupt flag
+	TIM_Cmd(TIM2, DISABLE);				// stop TIM2
+	// disable the DMA channels
+	DMA_Cmd(DMA1_Channel2, DISABLE);	
 	DMA_Cmd(DMA1_Channel5, DISABLE);
 	DMA_Cmd(DMA1_Channel7, DISABLE);
-	DMA_ClearITPendingBit(DMA1_IT_TC7);	// clear DMA7 transfer complete interrupt flag
+	// IMPORTANT: disable the DMA requests, too!
+	TIM_DMACmd(TIM2, TIM_DMA_CC1, DISABLE);
+	TIM_DMACmd(TIM2, TIM_DMA_CC2, DISABLE);
+	TIM_DMACmd(TIM2, TIM_DMA_Update, DISABLE);
 	tfin = 1; 							// indicate that transfer has finished
 }
 
@@ -243,6 +251,7 @@ int main(void)
 		 * and send them out sequentially */
 		for (set = 0; set < 3; set++)
 		{
+			while(!tfin);
 			for (i = 0; i < 48; i++)
 			{
 				WS2812_IO_framedata[i] = WS2812_testd[set*48+i];
