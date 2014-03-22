@@ -30,39 +30,23 @@ volatile uint8_t tfin = 1;
 
 /* WS2812 framebuffer
  * buffersize = (#LEDs / 16) * 24 */
-uint16_t WS2812_IO_framedata[48] = 
-{	
-	0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
-	0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-	0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
-	0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
-	0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
-	0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF
-}; 
+uint16_t WS2812_IO_framedata[48];
 
-/* some simple test data 
- * First LED pattern:  G-B-R 
- * Second LED pattern: R-B-G */
-uint16_t WS2812_testd[144] = 
+/* Array defining 12 color triplets to be displayed */
+uint8_t colors[12][3] = 
 {
-	0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-	0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
-	0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
-	0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
-	0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-	0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
-	0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
-	0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
-	0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-	0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
-	0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
-	0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-	0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
-	0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-	0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
-	0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-	0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
-	0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+	{0xFF, 0x00, 0x00},
+	{0xFF, 0x80, 0x00},
+	{0xFF, 0xFF, 0x00},
+	{0x80, 0xFF, 0x00},
+	{0x00, 0xFF, 0x00},
+	{0x00, 0xFF, 0x80},
+	{0x00, 0xFF, 0xFF},
+	{0x00, 0x80, 0xFF},
+	{0x00, 0x00, 0xFF},
+	{0x80, 0x00, 0xFF},
+	{0xFF, 0x00, 0xFF},
+	{0xFF, 0x00, 0x80}
 };
 
 /* simple delay counter to waste time, don't rely on for accurate timing */
@@ -237,9 +221,63 @@ void DMA1_Channel7_IRQHandler(void)
 	tfin = 1; 							// indicate that transfer has finished
 }
 
+/* This function sets the color of a simple pixel in the framebuffer 
+ * 
+ * Arguments:
+ * row = the channel number/LED strip the pixel is in from 0 to 15
+ * column = the column/LED position in the LED string from 0 to number of LEDs per strip
+ * red, green, blue = the RGB color triplet that the pixel should display 
+ */
+void WS2812_framedata_setPixel(uint8_t row, uint16_t column, uint8_t red, uint8_t green, uint8_t blue)
+{
+	uint8_t i;
+	for (i = 0; i < 8; i++)
+	{
+		// clear the data for pixel 
+		WS2812_IO_framedata[((column*24)+i)] &= ~(0x01<<row);
+		WS2812_IO_framedata[((column*24)+8+i)] &= ~(0x01<<row);
+		WS2812_IO_framedata[((column*24)+16+i)] &= ~(0x01<<row);
+		// write new data for pixel
+		WS2812_IO_framedata[((column*24)+i)] |= ((((green<<i) & 0x80)>>7)<<row);
+		WS2812_IO_framedata[((column*24)+8+i)] |= ((((red<<i) & 0x80)>>7)<<row);
+		WS2812_IO_framedata[((column*24)+16+i)] |= ((((blue<<i) & 0x80)>>7)<<row);
+	}
+}
+
+/* This function is a wrapper function to set all LEDs in the complete row to the specified color
+ * 
+ * Arguments:
+ * row = the channel number/LED strip to set the color of from 0 to 15
+ * columns = the number of LEDs in the strip to set to the color from 0 to number of LEDs per strip
+ * red, green, blue = the RGB color triplet that the pixels should display 
+ */
+void WS2812_framedata_setRow(uint8_t row, uint16_t columns, uint8_t red, uint8_t green, uint8_t blue)
+{
+	uint8_t i;
+	for (i = 0; i < columns; i++)
+	{
+		WS2812_framedata_setPixel(row, i, red, green, blue);
+	}
+}
+
+/* This function is a wrapper function to set all the LEDs in the column to the specified color
+ * 
+ * Arguments:
+ * rows = the number of channels/LED strips to set the row in from 0 to 15
+ * column = the column/LED position in the LED string from 0 to number of LEDs per strip
+ * red, green, blue = the RGB color triplet that the pixels should display 
+ */
+void WS2812_framedata_setColumn(uint8_t rows, uint16_t column, uint8_t red, uint8_t green, uint8_t blue)
+{
+	uint8_t i;
+	for (i = 0; i < rows; i++)
+	{
+		WS2812_framedata_setPixel(i, column, red, green, blue);
+	}
+}
+
 int main(void) 
 {	
-	uint16_t set;
 	uint8_t i;
 	
 	GPIO_init();
@@ -247,17 +285,21 @@ int main(void)
 	TIM2_init();
 	
 	while (1){
-		/* fill the framebuffer with 3 sets of 48 bytes each
-		 * and send them out sequentially */
-		for (set = 0; set < 3; set++)
+		// set two pixels (columns) in the defined row (channel 0) to the
+		// color values defined in the colors array
+		for (i = 0; i < 12; i++)
 		{
+			// wait until the last frame was transmitted
 			while(!tfin);
-			for (i = 0; i < 48; i++)
-			{
-				WS2812_IO_framedata[i] = WS2812_testd[set*48+i];
-			}
+			// this approach sets each pixel individually
+			//WS2812_framedata_setPixel(0, 0, colors[i][0], colors[i][1], colors[i][2]);
+			//WS2812_framedata_setPixel(0, 1, colors[i][0], colors[i][1], colors[i][2]);
+			// this funtion is a wrapper and achieved the same thing, tidies up the code
+			WS2812_framedata_setRow(0, 2, colors[i][0], colors[i][1], colors[i][2]);
+			// send the framebuffer out to the LEDs
 			WS2812_sendbuf(48);
-			Delay(5000000L);
+			// wait some amount of time
+			Delay(500000L);
 		}
 	}
 }
