@@ -23,10 +23,16 @@
 
 #include <stm32f10x.h>
 
+/* this define sets the number of TIM2 overflows
+ * to append to the data frame for the LEDs to 
+ * load the received data into their registers */
+#define WS2812_DEADPERIOD 19
+
 uint16_t WS2812_IO_High = 0xFFFF;
 uint16_t WS2812_IO_Low = 0x0000;
 
-volatile uint8_t tfin = 1;
+volatile uint8_t WS2812_TC = 1;
+volatile uint8_t TIM2_overflows = 0;
 
 /* WS2812 framebuffer
  * buffersize = (#LEDs / 16) * 24 */
@@ -101,6 +107,13 @@ void TIM2_init(void)
 	TIM_OCInitStructure.TIM_Pulse = 17;
 	TIM_OC2Init(TIM2, &TIM_OCInitStructure);
 	TIM_OC2PreloadConfig(TIM2, TIM_OCPreload_Disable);
+	
+	/* configure TIM2 interrupt */
+	NVIC_InitStructure.NVIC_IRQChannel = TIM2_IRQn;
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 2;
+	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+	NVIC_Init(&NVIC_InitStructure);
 }
 
 void DMA_init(void)
@@ -172,8 +185,8 @@ void DMA_init(void)
  * buffersize = (#LEDs / 16) * 24 */
 void WS2812_sendbuf(uint32_t buffersize)
 {		
-	/* transmission complete flag, indicate that transmission is taking place */
-	tfin = 0;
+	// transmission complete flag, indicate that transmission is taking place
+	WS2812_TC = 0;
 	
 	// clear all relevant DMA flags
 	DMA_ClearFlag(DMA1_FLAG_TC2 | DMA1_FLAG_HT2 | DMA1_FLAG_GL2 | DMA1_FLAG_TE2);
@@ -208,8 +221,10 @@ void WS2812_sendbuf(uint32_t buffersize)
 /* DMA1 Channel7 Interrupt Handler gets executed once the complete framebuffer has been transmitted to the LEDs */
 void DMA1_Channel7_IRQHandler(void)
 {
-	DMA_ClearITPendingBit(DMA1_IT_TC7);	// clear DMA7 transfer complete interrupt flag
-	TIM_Cmd(TIM2, DISABLE);				// stop TIM2
+	// clear DMA7 transfer complete interrupt flag
+	DMA_ClearITPendingBit(DMA1_IT_TC7);	
+	// enable TIM2 Update interrupt to append 50us dead period
+	TIM_ITConfig(TIM2, TIM_IT_Update, ENABLE);
 	// disable the DMA channels
 	DMA_Cmd(DMA1_Channel2, DISABLE);	
 	DMA_Cmd(DMA1_Channel5, DISABLE);
@@ -218,10 +233,38 @@ void DMA1_Channel7_IRQHandler(void)
 	TIM_DMACmd(TIM2, TIM_DMA_CC1, DISABLE);
 	TIM_DMACmd(TIM2, TIM_DMA_CC2, DISABLE);
 	TIM_DMACmd(TIM2, TIM_DMA_Update, DISABLE);
-	tfin = 1; 							// indicate that transfer has finished
+	
 }
 
-/* This function sets the color of a simple pixel in the framebuffer 
+/* TIM2 Interrupt Handler gets executed on every TIM2 Update if enabled */
+void TIM2_IRQHandler(void)
+{
+	// Clear TIM2 Interrupt Flag
+	TIM_ClearITPendingBit(TIM2, TIM_IT_Update);
+	
+	/* check if certain number of overflows has occured yet 
+	 * this ISR is used to guarantee a 50us dead time on the data lines
+	 * before another frame is transmitted */
+	if (TIM2_overflows < (uint8_t)WS2812_DEADPERIOD)
+	{
+		// count the number of occured overflows
+		TIM2_overflows++;
+	}
+	else
+	{
+		// clear the number of overflows
+		TIM2_overflows = 0;	
+		// stop TIM2 now because dead period has been reached
+		TIM_Cmd(TIM2, DISABLE);
+		/* disable the TIM2 Update interrupt again 
+		 * so it doesn't occur while transmitting data */
+		TIM_ITConfig(TIM2, TIM_IT_Update, DISABLE);
+		// finally indicate that the data frame has been transmitted
+		WS2812_TC = 1; 	
+	}
+}
+
+/* This function sets the color of a single pixel in the framebuffer 
  * 
  * Arguments:
  * row = the channel number/LED strip the pixel is in from 0 to 15
@@ -290,12 +333,12 @@ int main(void)
 		for (i = 0; i < 12; i++)
 		{
 			// wait until the last frame was transmitted
-			while(!tfin);
+			while(!WS2812_TC);
 			// this approach sets each pixel individually
-			//WS2812_framedata_setPixel(0, 0, colors[i][0], colors[i][1], colors[i][2]);
-			//WS2812_framedata_setPixel(0, 1, colors[i][0], colors[i][1], colors[i][2]);
+			WS2812_framedata_setPixel(0, 0, colors[i][0], colors[i][1], colors[i][2]);
+			WS2812_framedata_setPixel(0, 1, colors[i][0], colors[i][1], colors[i][2]);
 			// this funtion is a wrapper and achieved the same thing, tidies up the code
-			WS2812_framedata_setRow(0, 2, colors[i][0], colors[i][1], colors[i][2]);
+			//WS2812_framedata_setRow(0, 2, colors[i][0], colors[i][1], colors[i][2]);
 			// send the framebuffer out to the LEDs
 			WS2812_sendbuf(48);
 			// wait some amount of time
